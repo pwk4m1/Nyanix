@@ -1,0 +1,7 @@
+
+OFFSET | SIZE | DESC
+     0 |    4 | Signature ( 'nyan' )
+     4 |    4 | Size in kilobytes ( max 0xffffffff )
+
+
+
