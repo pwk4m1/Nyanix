@@ -9,12 +9,18 @@
 %include "src/consoles.asm"
 %include "src/bioscall.asm"
 
+current_sector:
+	db 	0
+
 loader_main:
 	push	bp
 	mov	bp, sp
 
+	mov 	byte [current_sector], SECTOR_CNT
+
 	; We start by finding the kernel header with basic
 	; disk read, then proceed with extended disk-read.
+	mov 	cl, byte [current_sector]
 	call	load_kern_hdr
 	call	parse_kern_hdr
 	call	load_kernel
@@ -108,6 +114,8 @@ load_kernel:
 ; =================================================================== ;
 ; Function to get kernel header.                                      ;
 ; We'll load kernel header to static address 0x2000                   ;
+;                                                                     ;
+; CL = sector to load from                                            ;
 ; =================================================================== ;
 load_kern_hdr:
 	push	bp
@@ -115,7 +123,7 @@ load_kern_hdr:
 
 	mov	bx, 0x2000
 	mov	ch, 0x00
-	mov	cl, SECTOR_CNT
+	mov 	cl, byte [current_sector]
 	add	cl, 4
 	xor	dh, dh
 	mov	dl, byte [boot_device]
@@ -124,7 +132,7 @@ load_kern_hdr:
 		mov	di, 5
 	.read:
 		mov	ah, 0x02
-		mov	al, 1
+		mov	al, 10
 		call	do_bios_call_13h
 		jnc	.read_done
 		dec	di
@@ -144,6 +152,11 @@ load_kern_hdr:
 ; section below.                                                      ;
 ; =================================================================== ;
 parse_kern_hdr:
+	push 	bp
+	mov 	bp, sp
+
+	mov 	cx, 63
+	push 	cx
 	mov	si, 0x2000
 	.loop:
 		cmp	dword [si], 'nyan'
@@ -156,25 +169,40 @@ parse_kern_hdr:
 	mov	si, .msg_kernel_found
 	call	write_serial
 	pop	si
+	mov 	ax, kern_offset
 
 	add	si, 4
 	mov	eax, dword [si]
 	mov	dword [kern_sectors_left], eax
+	pop 	cx
+
+	mov 	sp, bp
+	pop 	bp
 	ret
 
 .invalid_hdr:
 	inc	si
-	cmp	si, 0x2200
+	cmp	si, 0x4000
 	jl	.loop
 .fail:
+	pop 	cx
+	dec 	cx
+	jz 	.end_of_retries
+	push 	cx
+	mov 	cl, byte [current_sector]
+	inc 	cl
+	mov 	byte [current_sector], cl
+	call 	load_kern_hdr
+	jmp 	.loop
+
+.end_of_retries:
 	mov	si, .msg_invalid_hdr
 	call	panic
 
 .msg_invalid_hdr:
 	db	"INVALID KERNEL HEADER, CORRUPTED DISK?", 0x0
 .msg_kernel_found:
-	db	"Found kernel from sector "
-	db	(0x30 + SECTOR_CNT + 4)
+	db	"Found kernel"
 	db	0x0A, 0x0D, 0
 
 ; =================================================================== ;

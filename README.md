@@ -2,13 +2,14 @@
 Simple bootloader project. Aiming for clean code.
 
 Usage:
-	At very beginnig of your kernel, there *must* be header as defined
-	in KERNEL_HEADER.txt file. This header tells the bootloader how
+	At very beginning of your kernel, there *must* be header as defined
+	in KERNEL_HEADER.txt file. Very beginning as in within first 5 kb after
+	bootloader. This header tells the bootloader how
 	large your kernel and/or OS is. Refer to test_kernel/test.asm to
 	see how-to set up the header.
 
-	Your kernel may be in whatever format you wish, however, it must
-	not have any other header before the KERNEL_HEADER.
+	Kernel may be in any format, but the signature must be within
+	said limit.
 
 	After the header, the bootloader assumes to be kernel entry point.
 	If you wish to have some sort of data-section there, your kernel
