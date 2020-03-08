@@ -30,7 +30,24 @@ loader_main:
 	add	di, word [kern_offset]
 	add	edi, 4
 	add	edi, 4
-	jmp	edi
+	mov 	ebx, edi
+
+	cli
+	lgdt 	[gdt32]
+	mov 	eax, cr0
+	or 	al, 1
+	mov 	cr0, eax
+	jmp 	0x08:.pm
+.pm:
+	mov 	ax, 0x10
+	mov 	es, ax
+	mov 	fs, ax
+	mov 	ds, ax
+	mov 	gs, ax
+	mov 	ss, ax
+	jmp 	[ebx]
+	cli
+	hlt
 
 ; Counter for remaining kernel sectors
 kern_sectors_left:
@@ -155,7 +172,7 @@ parse_kern_hdr:
 	push 	bp
 	mov 	bp, sp
 
-	mov 	cx, 6
+	mov 	cx, 63
 	push 	cx
 	mov	si, 0x2000
 	.loop:
