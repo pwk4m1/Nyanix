@@ -155,7 +155,7 @@ parse_kern_hdr:
 	push 	bp
 	mov 	bp, sp
 
-	mov 	cx, 63
+	mov 	cx, 6
 	push 	cx
 	mov	si, 0x2000
 	.loop:
