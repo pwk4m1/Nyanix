@@ -164,7 +164,7 @@ parse_kern_hdr:
 
 .invalid_hdr:
 	inc	si
-	cmp	si, 0x2512
+	cmp	si, 0x2200
 	jl	.loop
 .fail:
 	mov	si, .msg_invalid_hdr
