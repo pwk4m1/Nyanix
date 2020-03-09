@@ -2,27 +2,51 @@
 Simple bootloader project. Aiming for clean code.
 
 Usage:
-	At very beginning of your kernel, there *must* be header as defined
-	in KERNEL_HEADER.txt file. Very beginning as in within first 5 kb after
-	bootloader. This header tells the bootloader how
-	large your kernel and/or OS is. Refer to test_kernel/test.asm to
-	see how-to set up the header.
+	Your kernel must be at least 5 kilobytes large, and be 512-byte
+	aligned in total size. Kernel header needs to be set withing first
+	5 kilobytes in image. This should still allow plenty enough space
+	for other headers such as ELF or PE.
 
-	Kernel may be in any format, but the signature must be within
-	said limit.
+	Kernel image must be located immediately after bootloader on bootdisk.
+	Refer to KERNEL_HEADER.txt to see how to setup the header used by
+	the bootloader.
 
-	After the header, the bootloader assumes to be kernel entry point.
-	If you wish to have some sort of data-section there, your kernel
-	must be formated in following way:
+	Bootloader initializes serial port 0x3F7 and A20 gate, and
+	enables 32-bit protected mode with fairly simple GDT.
+	Kernel is loaded to 0x000100ee with CS 0x08, other segments 0x10.
 
-		section .text
-		kernel_header
-		jump to code entry
-		section .whatever
-		...
+Example kernel formating:
+	; kernel.asm
+	; assemble: nasm -felf32 -o kernel.o kernel.asm
+	bits 	32
+	db 	"nyan"
+	dd 	((kernel_end - _start + 512) / 512)
 
-That's all, I guess. Do enjoy.
+	global  _start
+	_start:
+		mov 	eax, 0x0badc0de
+		cli
+		hlt
+	kernel_end:
+		times 	512 db 0x41
 
+	/* linker.ld */
+	ENTRY(_start)
+	SECTIONS {
+		. = 0x000100ee;
+		.text ALIGN (4K) : BLOCK (4K) {
+			*(.text)
+		}
+		/* Other sections */
+	}
 
-Oh one more thing, kernel is loaded to address: 0x000100ee 
+	# Build script
+	nasm -felf32 -o kernel.o kernel.asm
+	ld --script=linker.ld -o kernel.elf kernel.o
+	dd if=kernel.elf bs=1 >> nyanix.bin
+
+Contribution:
+	General code optimization would be welcome, code as is might be 
+	hopefully pretty to read but it has quite a few slow functions.
+ 	New features, drivers etc. is always welcome too.
 
