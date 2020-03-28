@@ -93,14 +93,14 @@ load_kernel:
 	call	write_serial
 
 	; relocate sectors to 0x100000 onwards
-	mov	ecx, (0x28 * 512)
+	mov	ecx, ((0x28 * 512) / 4)
 
 	.relocation_loop_start:
 		mov	edx, dword [current_target_addr]
 		mov	ebx, 0x2000
 	.relocation_loop:
-		mov	al, byte [ebx]
-		mov	byte [edx], al
+		mov	eax, dword [ebx]
+		mov	dword [edx], eax
 		inc	edx
 		inc	ebx
 		loop	.relocation_loop
