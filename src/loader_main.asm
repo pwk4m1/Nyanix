@@ -3,7 +3,7 @@
 ; All rights reserved. See /LICENSE for full license agreement.
 ;
 ; This code is responsible of loading the kernel from boot device, and
-; then relocating it to 0x10000.
+; then relocating it to 0x100000.
 ;
 
 %include "src/consoles.asm"
@@ -26,7 +26,7 @@ loader_main:
 	call	load_kernel
 
 	; Jump to kernel entry after header
-	mov	edi, 0x10000
+	mov	edi, 0x100000
 	add	di, word [kern_offset]
 	add	edi, 4
 	add	edi, 4
@@ -59,7 +59,7 @@ kern_offset:
 
 ; address where we store our kernel
 current_target_addr:
-	dd	0x10000
+	dd	0x100000
 
 ; =================================================================== ;
 ; Function to handle actual kernel load process.                      ;
@@ -92,7 +92,7 @@ load_kernel:
 	mov	si, .msg_loaded_chunk
 	call	write_serial
 
-	; relocate sectors to 0x10000 onwards
+	; relocate sectors to 0x100000 onwards
 	mov	ecx, (0x28 * 512)
 
 	.relocation_loop_start:
