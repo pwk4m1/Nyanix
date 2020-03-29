@@ -101,8 +101,9 @@ load_kernel:
 	; practically means we could only load to address 0xF:FFFF at most,
 	; which is still in MMI/O space (usually MOBO BIOS ROM to be exact).
 	; swap to 32-bit mode would allow us to use esi, edi, but that'd mean
-	; we'd need to load our whole kernel to low memory, and find enough
-	; space to somehow fit it here.. that'd limit us a *LOT*.
+	; we'd need to load our whole kernel to low memory first,
+	; and find enough space to somehow fit it here.. 
+	; that'd limit us a *LOT*.
 	;
 	; Finaly way would be that constant swap between 16 and 32 bit mode,
 	; but that's not something I want to do.
