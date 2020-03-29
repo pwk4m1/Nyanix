@@ -95,14 +95,26 @@ load_kernel:
 	; relocate sectors to 0x100000 onwards
 	mov	ecx, ((0x28 * 512) / 4)
 
+	; I'd much more prefer movsd here, but that'd mean we'd need to
+	; either constantly swap between 32 and 16 bit mode, as atleast on
+	; qemu movsN does use ds:si, es:di on 32-bit unreal mode too. This
+	; practically means we could only load to address 0xF:FFFF at most,
+	; which is still in MMI/O space (usually MOBO BIOS ROM to be exact).
+	; swap to 32-bit mode would allow us to use esi, edi, but that'd mean
+	; we'd need to load our whole kernel to low memory, and find enough
+	; space to somehow fit it here.. that'd limit us a *LOT*.
+	;
+	; Finaly way would be that constant swap between 16 and 32 bit mode,
+	; but that's not something I want to do.
+	;
 	.relocation_loop_start:
 		mov	edx, dword [current_target_addr]
 		mov	ebx, 0x2000
 	.relocation_loop:
 		mov	eax, dword [ebx]
-		mov	dword [edx], eax
-		inc	edx
-		inc	ebx
+		mov	dword [edx], eax 
+		add 	ebx, 4
+		add 	edx, 4
 		loop	.relocation_loop
 
 	; adjust target address
