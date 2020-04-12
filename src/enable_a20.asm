@@ -13,6 +13,9 @@ loader_entry:
 
 	mov	byte [boot_device], dl
 
+	; init heap for malloc/free
+	call 	mm_heap_init
+
 	call	enable_a20_with_bios
 	test	eax, eax
 	jz	.a20_is_on

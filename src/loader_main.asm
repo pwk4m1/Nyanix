@@ -8,6 +8,7 @@
 
 %include "src/consoles.asm"
 %include "src/bioscall.asm"
+%include "src/mm.asm"
 
 current_sector:
 	db 	0
@@ -16,6 +17,7 @@ loader_main:
 	push	bp
 	mov	bp, sp
 
+	; sector offset, so we don't search for kernel in our bootloader
 	mov 	byte [current_sector], SECTOR_CNT
 
 	; We start by finding the kernel header with basic
@@ -25,13 +27,14 @@ loader_main:
 	call	parse_kern_hdr
 	call	load_kernel
 
-	; Jump to kernel entry after header
+	; prepare kernel entry address to ebx
 	mov	edi, 0x100000
 	add	di, word [kern_offset]
 	add	edi, 4
 	add	edi, 4
 	mov 	ebx, edi
 
+	; enable 32-bit protected mode with simple gdt, disable interrupts
 	cli
 	lgdt 	[gdt32]
 	mov 	eax, cr0
@@ -64,7 +67,6 @@ current_target_addr:
 ; =================================================================== ;
 ; Function to handle actual kernel load process.                      ;
 ; =================================================================== ;
-
 load_kernel:
 	push	bp
 	mov	bp, sp
@@ -78,10 +80,12 @@ load_kernel:
 	jmp	.do_read
 
 .final_iteration:
+	; Load remaining needed sectors from disk
 	mov	ax, word [kern_sectors_left]
 	mov	word [DAP.sector_count], ax
 
 .do_read:
+	; do actual disk read with extended disk read (0x13, al=0x42)
 	mov	dword [DAP.transfer_buffer], 0x2000
 	mov	dl, byte [boot_device]
 	mov	al, 0x42
@@ -93,6 +97,9 @@ load_kernel:
 	call	write_serial
 
 	; relocate sectors to 0x100000 onwards
+	; We could also relocate less than 0x28 sectors on last read but
+	; it's less logic, easier code when it's like this.
+	; Someday when I have motivation to do so, I'll optimize these. maybe
 	mov	ecx, ((0x28 * 512) / 4)
 
 	; I'd much more prefer movsd here, but that'd mean we'd need to
@@ -105,7 +112,7 @@ load_kernel:
 	; and find enough space to somehow fit it here.. 
 	; that'd limit us a *LOT*.
 	;
-	; Finaly way would be that constant swap between 16 and 32 bit mode,
+	; One way would be that constant swap between 16 and 32 bit mode,
 	; but that's not something I want to do.
 	;
 	.relocation_loop_start:
@@ -139,7 +146,7 @@ load_kernel:
 .msg_kern_load_failed:
 	db "KERNEL LOAD FAILED", 0x0A, 0x0D, 0
 .msg_loaded_chunk:
-	db "Loaded ~ 20Kb chunk of kernel.", 0x0A, 0x0D, 0
+	db "Loaded ~ 20Kb chunk from disk.", 0x0A, 0x0D, 0
 
 ; =================================================================== ;
 ; Function to get kernel header.                                      ;
@@ -151,6 +158,7 @@ load_kern_hdr:
 	push	bp
 	mov	bp, sp
 
+	; do disk read (0x13, al=10/ah=0x02)
 	mov	bx, 0x2000
 	mov	ch, 0x00
 	mov 	cl, byte [current_sector]
@@ -246,7 +254,6 @@ parse_kern_hdr:
 ;      8 |    4 | lower 32-bits of 48-bit starting LBA                ;
 ;     12 |    4 | upper 32-bits of 48-bit starting LBAs               ;
 ; =================================================================== ;
-
 DAP:
 	.size:
 		db	0x10
@@ -263,4 +270,3 @@ DAP:
 
 sectors equ SECTOR_CNT * 512 + 512
 times sectors db 0xff
-

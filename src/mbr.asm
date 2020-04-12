@@ -24,19 +24,16 @@ mbr_start:
 	; Clear rest of segments
 	xor	ax, ax
 	mov	ds, ax
-	mov	ss, ax
 	mov	es, ax
 
+	mov	ss, ax
 	mov	sp, 0x7c00
 	mov	bp, sp
-
-	sti
 
 	; Store boot device
 	push	dx
 
 	; swap to unreal mode
-	cli
 	push	ds
 	lgdt	[gdt]
 	mov	eax, cr0
