@@ -16,6 +16,8 @@ Usage:
 	Kernel is loaded to 0x0010013b with CS 0x08, other segments 0x10.
 
 Example kernel formating:
+
+```nasm
 	; kernel.asm
 	; assemble: nasm -felf32 -o kernel.o kernel.asm
 	bits 	32
@@ -29,7 +31,9 @@ Example kernel formating:
 		hlt
 	kernel_end:
 		times 	512 db 0x41
+```
 
+```linker
 	/* linker.ld */
 	ENTRY(_start)
 	SECTIONS {
@@ -39,11 +43,14 @@ Example kernel formating:
 		}
 		/* Other sections */
 	}
+```
 
+```shell
 	# Build script
 	nasm -felf32 -o kernel.o kernel.asm
 	ld --script=linker.ld -o kernel.elf kernel.o
 	dd if=kernel.elf bs=1 >> nyanix.bin
+```
 
 Contribution:
 	General code optimization would be welcome, code as is might be 
