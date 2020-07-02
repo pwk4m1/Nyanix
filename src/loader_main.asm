@@ -25,13 +25,20 @@ loader_main:
 	mov 	cl, byte [current_sector]
 	call	load_kern_hdr
 	call	parse_kern_hdr
+	push 	eax
+	push 	ebx
+	xor 	ebx, ebx
+	mov 	eax, dword [current_target_addr]
+	mov 	bx, word [kern_offset]
+	sub 	eax, ebx
+	mov 	dword [current_target_addr], eax
+	pop 	ebx
+	pop 	eax
 	call	load_kernel
 
 	; prepare kernel entry address to ebx
 	mov	edi, 0x100000
-	add	di, word [kern_offset]
-	add	edi, 4
-	add	edi, 4
+	add	edi, 8 ; sizeof kernel header
 	mov 	ebx, edi
 
 	; enable 32-bit protected mode with simple gdt, disable interrupts
