@@ -38,7 +38,7 @@ Example kernel formating:
 	ENTRY(_start)
 	SECTIONS {
 		. = 0x0010013b;
-		.text ALIGN (4K) : BLOCK (4K) {
+		.text BLOCK (4K) : ALIGN (4K) {
 			*(.text)
 		}
 		/* Other sections */
