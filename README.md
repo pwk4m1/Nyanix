@@ -13,7 +13,7 @@ Usage:
 
 	Bootloader initializes serial port 0x3F7 and A20 gate, and
 	enables 32-bit protected mode with fairly simple GDT.
-	Kernel is loaded to 0x0010013b with CS 0x08, other segments 0x10.
+	Kernel is loaded to 0x100000 with CS 0x08, other segments 0x10.
 
 Example kernel formating:
 
@@ -37,8 +37,11 @@ Example kernel formating:
 	/* linker.ld */
 	ENTRY(_start)
 	SECTIONS {
-		. = 0x0010013b;
-		.text BLOCK (4K) : ALIGN (4K) {
+		. = 0x100000;
+		.header BLOCK (1) : ALIGN (1) {
+			*(.header)
+		}
+		.text BLOCK (1) : ALIGN (1) {
 			*(.text)
 		}
 		/* Other sections */
