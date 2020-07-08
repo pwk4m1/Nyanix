@@ -17,6 +17,7 @@ write_serial:
 	ret
 
 panic:
+	push 	si
 	mov	edi, 0xB8000
 	.loop:
 		lodsb
@@ -25,6 +26,14 @@ panic:
 		add	edi, 2
 		test	al, al
 		jnz	.loop
+	pop 	si
+	.serial_loop:
+		mov 	dx, 0x3f8
+		lodsb
+		test 	al, al
+		jz 	.hang
+		out 	dx, al
+		jmp 	.serial_loop
 	.hang:
 		cli
 		hlt

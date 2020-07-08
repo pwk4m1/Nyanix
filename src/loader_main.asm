@@ -36,14 +36,17 @@ loader_main:
 	; then after that we'll make use of extended disk read.
 	;
 	; Even if the docs specify that kernel header should follow immediately
-	; after bootloader, we'll allow up to 63 sectors (~30 kilobytes) of 
+	; after bootloader, we'll allow up to 10 sectors (~5 kilobytes) of 
 	; space to exist between kernel header and us.
-	mov 	cl, 63
+	xor 	ecx, ecx
+	mov 	cl, 10
 	.kernel_load_loop:
+		push 	cx
 		call 	load_sector
 		call 	parse_kernel_header
 		jc 	.kernel_found
 		add 	byte [current_sector], 1
+		pop 	cx
 		loop 	.kernel_load_loop
 
 	; kernel was not found, notify user and halt
@@ -123,8 +126,8 @@ load_sector:
 parse_kernel_header:
 	push 	bp
 	mov 	bp, sp
-	pusha
 	clc 		; clear carry flag, we'll set it if kernel is found
+	pusha
 
 	mov 	si, 0x2000
 	.search:
@@ -135,8 +138,8 @@ parse_kernel_header:
 		jl 	.search
 	
 	; kernel was not found :(
-.ret:
 	popa
+.ret:
 	mov 	sp, bp
 	pop 	bp
 	ret
@@ -149,7 +152,10 @@ parse_kernel_header:
 	mov 	word [kernel_entry_offset], si
 	mov 	si, msg_kernel_found
 	call 	write_serial
+	popa 
+	stc
 	jmp 	.ret
+
 
 ; load_kernel function is basicly a loop going through
 ; extended disk read untill we've loaded the whole kernel.
