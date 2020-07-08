@@ -38,12 +38,10 @@ loader_main:
 	xor 	ecx, ecx
 	mov 	cl, 10
 	.kernel_load_loop:
-		push 	cx
 		call 	load_sector
 		call 	parse_kernel_header
 		jc 	.kernel_found
 		add 	byte [current_sector], 1
-		pop 	cx
 		loop 	.kernel_load_loop
 
 	; kernel was not found, notify user and halt
