@@ -8,250 +8,261 @@
 
 %include "src/consoles.asm"
 %include "src/bioscall.asm"
-%include "src/mm.asm"
 
+USED_SECTORS equ (SECTOR_CNT + 1)
+
+kernel_sectors_left:
+	dd 	0
+
+kernel_entry_offset:
+	dw 	0
+
+current_target_addr:
+	dd 	0x100000
+	
 current_sector:
 	db 	0
 
 loader_main:
-	push	bp
-	mov	bp, sp
+	push 	bp
+	mov 	bp, sp
 
-	; sector offset, so we don't search for kernel in our bootloader
-	mov 	byte [current_sector], SECTOR_CNT
+	; sector offset on disk is set to be amount of sectors this bootloader
+	; uses, so that we don't waste time looking for kernel header from
+	; within the bootloader.
+	mov 	byte [current_sector], USED_SECTORS
 
-	; We start by finding the kernel header with basic
-	; disk read, then proceed with extended disk-read.
-	mov 	cl, byte [current_sector]
-	call	load_kern_hdr
-	call	parse_kern_hdr
-	push 	eax
-	push 	ebx
-	xor 	ebx, ebx
-	mov 	eax, dword [current_target_addr]
-	mov 	bx, word [kern_offset]
-	sub 	eax, ebx
-	mov 	dword [current_target_addr], eax
-	pop 	ebx
-	pop 	eax
-	call	load_kernel
+	; normal disk read is used to first find the kernel header, only
+	; then after that we'll make use of extended disk read.
+	;
+	; Even if the docs specify that kernel header should follow immediately
+	; after bootloader, we'll allow up to 63 sectors (~30 kilobytes) of 
+	; space to exist between kernel header and us.
+	mov 	cl, 63
+	.kernel_load_loop:
+		call 	load_sector
+		call 	parse_kernel_header
+		jc 	.kernel_found
+		add 	byte [current_sector], 1
+		loop 	.kernel_load_loop
 
-	; prepare kernel entry address to ebx
-	mov	edi, 0x100000
-	add	edi, 8 ; sizeof kernel header
-	mov 	ebx, edi
+	; kernel was not found, notify user and halt
+	mov 	si, msg_no_kernel
+	call 	panic
 
-	; enable 32-bit protected mode with simple gdt, disable interrupts
+.kernel_found:
+	; load kernel expects 3 values to be set, all these are
+	; set by parse_kernel_header.
+	;  - kernel_sectors_left: size of kernel
+	;  - kernel_entry_offset: offset to kernel entry incase there's
+	; 			junk between bootloader & kernel
+	;  - current_target_addr: address where to read disk to, this
+	; 			starts at 0x100000
+	;
+	call 	load_kernel
+
+	; prepare kernel entry address to EBX & setup 32-bit protected
+	; mode with simple GDT & disabled interrupts
+	mov 	ebx, 0x100000
+	add 	ebx, 8  	; sizeof kernel header
+
 	cli
 	lgdt 	[gdt32]
 	mov 	eax, cr0
 	or 	al, 1
 	mov 	cr0, eax
-	jmp 	0x08:.pm
-.pm:
-	mov 	ax, 0x10
-	mov 	es, ax
-	mov 	fs, ax
-	mov 	ds, ax
-	mov 	gs, ax
-	mov 	ss, ax
-	jmp 	[ebx]
-	cli
-	hlt
-
-; Counter for remaining kernel sectors
-kern_sectors_left:
-	dd	0x00000000
-
-; Offset to beginning of kernel header
-kern_offset:
-	dw	0x0000
-
-; address where we store our kernel
-current_target_addr:
-	dd	0x100000
-
+	jmp 	0x08:.protected_mode_entry
+	.protected_mode_entry:
+		mov 	ax, 0x10
+		mov 	es, ax
+		mov 	fs, ax
+		mov 	ds, ax
+		mov 	gs, ax
+		mov 	ss, ax
+		jmp 	[ebx]
+	
 ; =================================================================== ;
-; Function to handle actual kernel load process.                      ;
+; End of main "logic", rest is helper functions 'n stuff              ;
 ; =================================================================== ;
-load_kernel:
-	push	bp
-	mov	bp, sp
 
-.load_kernel_start:
-	cmp	dword [kern_sectors_left], 0x28
-	jle	.final_iteration
-
-	; Load 0x28 sectors from disk
-	mov	word [DAP.sector_count], 0x28
-	jmp	.do_read
-
-.final_iteration:
-	; Load remaining needed sectors from disk
-	mov	ax, word [kern_sectors_left]
-	mov	word [DAP.sector_count], ax
-
-.do_read:
-	; do actual disk read with extended disk read (0x13, al=0x42)
-	mov	dword [DAP.transfer_buffer], 0x2000
-	mov	dl, byte [boot_device]
-	mov	al, 0x42
-	mov	si, DAP
-	call	do_bios_call_13h
-	jc	.fail
-
-	mov	si, .msg_loaded_chunk
-	call	write_serial
-
-	; relocate sectors to 0x100000 onwards
-	; We could also relocate less than 0x28 sectors on last read but
-	; it's less logic, easier code when it's like this.
-	; Someday when I have motivation to do so, I'll optimize these. maybe
-	mov	ecx, ((0x28 * 512) / 4)
-
-	; I'd much more prefer movsd here, but that'd mean we'd need to
-	; either constantly swap between 32 and 16 bit mode, as atleast on
-	; qemu movsN does use ds:si, es:di on 32-bit unreal mode too. This
-	; practically means we could only load to address 0xF:FFFF at most,
-	; which is still in MMI/O space (usually MOBO BIOS ROM to be exact).
-	; swap to 32-bit mode would allow us to use esi, edi, but that'd mean
-	; we'd need to load our whole kernel to low memory first,
-	; and find enough space to somehow fit it here.. 
-	; that'd limit us a *LOT*.
-	;
-	; One way would be that constant swap between 16 and 32 bit mode,
-	; but that's not something I want to do.
-	;
-	.relocation_loop_start:
-		mov	edx, dword [current_target_addr]
-		mov	ebx, 0x2000
-	.relocation_loop:
-		mov	eax, dword [ebx]
-		mov	dword [edx], eax 
-		add 	ebx, 4
-		add 	edx, 4
-		loop	.relocation_loop
-
-	; adjust target address
-	inc	edx
-	mov	dword [current_target_addr], edx
-
-	; adjust remaining sector count
-	mov	ax, word [DAP.sector_count]
-	sub	dword [kern_sectors_left], eax
-	cmp	dword [kern_sectors_left], 0
-	jne	.load_kernel_start
-
-	; we're done reading the kernel !
-	mov	sp, bp
-	pop	bp
-	ret
-
-.fail:
-	mov	esi, .msg_kern_load_failed
-	call	panic
-.msg_kern_load_failed:
-	db "KERNEL LOAD FAILED", 0x0A, 0x0D, 0
-.msg_loaded_chunk:
-	db "Loaded ~ 20Kb chunk from disk.", 0x0A, 0x0D, 0
-
-; =================================================================== ;
-; Function to get kernel header.                                      ;
-; We'll load kernel header to static address 0x2000                   ;
-;                                                                     ;
-; CL = sector to load from                                            ;
-; =================================================================== ;
-load_kern_hdr:
-	push	bp
-	mov	bp, sp
-
-	; do disk read (0x13, al=10/ah=0x02)
-	mov	bx, 0x2000
-	mov	ch, 0x00
-	mov 	cl, byte [current_sector]
-	add	cl, 4
-	xor	dh, dh
-	mov	dl, byte [boot_device]
-
-	.read_start:
-		mov	di, 5
-	.read:
-		mov	ah, 0x02
-		mov	al, 10
-		call	do_bios_call_13h
-		jnc	.read_done
-		dec	di
-		test	di, di
-		jnz	.read
-		mov	si, .msg_disk_read_fail
-		call	panic
-	.read_done:
-		mov	sp, bp
-		pop	bp
-		ret
-	.msg_disk_read_fail:
-		db	"DISK READ FAILED", 0x0
-
-; =================================================================== ;
-; Function to parse kernel header & populate DAP accordingly. See     ;
-; section below.                                                      ;
-; =================================================================== ;
-parse_kern_hdr:
+; This function loads single sector from disk to memory, sector to read
+; is choosen by [current_sector]
+;
+load_sector:
 	push 	bp
 	mov 	bp, sp
+	pusha
 
-	mov 	cx, 63
-	push 	cx
-	mov	si, 0x2000
-	.loop:
-		cmp	dword [si], 'nyan'
-		jne	.invalid_hdr
+	; do disk read (int 0x13, ax = 0x0210), target = 0x2000
+	mov 	bx, 0x2000
+	xor 	cx, cx
+	mov 	cl, byte [current_sector]
+	xor 	dx, dx
+	mov 	dl, byte [boot_device] ; this we get from code at mbr.asm
 
-	sub	si, 0x2000
-	mov	word [kern_offset], si
-	add	si, 0x2000
-	push	si
-	mov	si, .msg_kernel_found
-	call	write_serial
-	pop	si
-	mov 	ax, kern_offset
+	.read_start:
+		mov 	di, 5
+	.read:
+		mov 	ax, 0x0210
+		call 	do_bios_call_13h
+		jnc 	.read_done
+		dec 	di
+		test 	di, di
+		jnz 	.read
+		mov 	si, msg_disk_read_fail
+		call 	panic
+	.read_done:
+		popa
+		mov 	sp, bp
+		pop 	bp
+		ret
 
-	add	si, 4
-	mov	eax, dword [si]
-	mov	dword [kern_sectors_left], eax
-	pop 	cx
+; This function parses kernel header, setting DAP and other
+; variables accordingly.
+;
+parse_kernel_header:
+	push 	bp
+	mov 	bp, sp
+	pusha
+	clc 		; clear carry flag, we'll set it if kernel is found
 
+	mov 	si, 0x2000
+	.search:
+		cmp 	dword [si], 'nyan'
+		je 	.found_hdr
+		inc 	si
+		cmp 	si, 0x2200 ; sector size = 0x200
+		jl 	.search
+	
+	; kernel was not found :(
+.ret:
+	popa
 	mov 	sp, bp
 	pop 	bp
 	ret
 
-.invalid_hdr:
-	inc	si
-	cmp	si, 0x4000
-	jl	.loop
+.found_hdr:
+	; kernel was found :)
+	mov 	eax, dword [si+4]
+	mov 	dword [kernel_sectors_left], eax
+	sub 	si, 0x2000
+	mov 	word [kernel_entry_offset], si
+	mov 	si, msg_kernel_found
+	call 	write_serial
+	jmp 	.ret
+
+; load_kernel function is basicly a loop going through
+; extended disk read untill we've loaded the whole kernel.
+load_kernel:
+	push 	bp
+	mov 	bp, sp
+	pusha
+
+.start:
+	; reads happen 0x28 sectors at time MAX.
+	cmp 	dword [kernel_sectors_left], 0x28
+	jle 	.final_iteration
+
+	mov 	word [DAP.sector_count], 0x28
+	jmp 	.do_read
+
+.final_iteration:
+	mov 	ax, word [kernel_sectors_left]
+	mov 	word [DAP.sector_count], ax
+
+.do_read:
+	; extended disk read: int=0x13, al=0x42
+	mov 	dword [DAP.transfer_buffer], 0x2000
+	mov 	dl, byte [boot_device]
+	mov 	al, 0x42
+	mov 	si, DAP
+	call 	do_bios_call_13h
+	jc 	.fail
+
+	mov 	si, msg_loaded_block
+	call 	write_serial
+
+	; relocate sectors to 0x100000 onwards
+	; reloaction adjusts target address for us
+	call 	kernel_relocate
+
+	; adjust remaining sector count
+	xor 	eax, eax
+	mov 	ax, word [DAP.sector_count]
+	sub 	dword [kernel_sectors_left], eax
+	cmp 	dword [kernel_sectors_left], 0
+	jne 	.start
+
+	; kernel has been loaded
+	popa
+	mov 	sp, bp
+	pop 	bp
+	ret
+
 .fail:
-	pop 	cx
-	dec 	cx
-	jz 	.end_of_retries
-	push 	cx
-	mov 	cl, byte [current_sector]
-	inc 	cl
-	mov 	byte [current_sector], cl
-	call 	load_kern_hdr
-	jmp 	.loop
+	mov 	si, msg_disk_read_fail
+	call 	panic
 
-.end_of_retries:
-	mov	si, .msg_invalid_hdr
-	call	panic
 
-.msg_invalid_hdr:
-	db	"INVALID KERNEL HEADER, CORRUPTED DISK?", 0x0
-.msg_kernel_found:
-	db	"Found kernel"
-	db	0x0A, 0x0D, 0
+kernel_relocate:
+	push 	bp
+	mov 	bp, sp
+	pusha
+
+        ; relocate sectors to 0x100000 onwards
+        ; We could also relocate less than 0x28 sectors on last read but
+	; it's less logic, easier code when it's like this,
+	; someday, and that day might never come, but someday I will optimize
+	; this and make it better
+	mov 	ecx, ((0x28 * 512) / 4) ; amount of dwords to reloacte
+
+        ; I'd much more prefer movsd here, but that'd mean we'd need to
+        ; either constantly swap between 32 and 16 bit mode, as atleast on
+        ; qemu movsN does use ds:si, es:di on 32-bit unreal mode too. This
+        ; practically means we could only load to address 0xF:FFFF at most,
+        ; which is still in MMI/O space (usually MOBO BIOS ROM to be exact).
+        ; swap to 32-bit mode would allow us to use esi, edi, but that'd mean
+        ; we'd need to load our whole kernel to low memory first,
+        ; and find enough space to somehow fit it here..
+        ; that'd limit us a *LOT*.
+        ;
+        ; One way would be that constant swap between 16 and 32 bit mode,
+        ; but that's not something I want to do.
+        ;
+	.relocation_loop_start:
+		mov 	edx, dword [current_target_addr]
+		mov 	ebx, 0x2000
+	.loop:
+		mov 	eax, dword [ebx]
+		mov 	dword [edx], eax
+		add 	ebx, 4
+		add 	edx, 4
+		loop 	.loop
+	
+	; adjust target address
+	inc 	edx
+	mov 	dword [current_target_addr], edx
+
+	popa
+	mov 	sp, bp
+	pop 	bp
+	ret
+
+; Some pretty messages to print
+msg_no_kernel:
+	db "Bootloader did not find kernel from disk :(", 0x0
+
+msg_disk_read_fail:
+	db "Failed to read disk, firmware bug?", 0x0
+
+msg_kernel_found:
+	db "Found kernel, loading...", 0x0A, 0x0D, 0
+
+msg_loaded_block:
+	db "Loaded up to 20kb of kernel/os from disk...", 0x0A, 0x0D, 0
 
 ; =================================================================== ;
-; Disk address packet format:                                         ;
+; Disk Address Packet format:                                         ;
 ;                                                                     ;
 ; Offset | Size | Desc                                                ;
 ;      0 |    1 | Packet size                                         ;
@@ -263,17 +274,17 @@ parse_kern_hdr:
 ; =================================================================== ;
 DAP:
 	.size:
-		db	0x10
+		db 	0x10
 	.zero:
-		db	0x00
+		db 	0x00
 	.sector_count:
-		dw	0x0000
+		dw 	0x0000
 	.transfer_buffer:
-		dd	0x00000000
+		dd 	0x00000000
 	.lower_lba:
-		dd	0x00000000
+		dd 	0x00000000
 	.higher_lba:
-		dd	0x00000000
+		dd 	0x00000000
 
-sectors equ SECTOR_CNT * 512 + 512
-times sectors db 0xff
+times 	(USED_SECTORS * 512) - ($ - $$) db 0
+
