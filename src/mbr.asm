@@ -138,5 +138,5 @@ load_second_stage:
 times	510-($-$$) db 0
 dw	0xAA55
 
-%include "src/enable_a20.asm"
+%include "src/second_stage.asm"
 
