@@ -35,9 +35,6 @@ loader_main:
 	; normal disk read is used to first find the kernel header, only
 	; then after that we'll make use of extended disk read.
 	;
-	; Even if the docs specify that kernel header should follow immediately
-	; after bootloader, we'll allow up to 10 sectors (~5 kilobytes) of 
-	; space to exist between kernel header and us.
 	xor 	ecx, ecx
 	mov 	cl, 10
 	.kernel_load_loop:
