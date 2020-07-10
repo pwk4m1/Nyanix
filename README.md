@@ -2,8 +2,8 @@
 Simple bootloader project. Aiming for clean code.
 
 Usage:
-	Your kernel must be at least 5 kilobytes large, and be 512-byte
-	aligned in total size. Kernel header needs to be set withing first
+	Your kernel must  be 512-byte aligned in total size. 
+	Kernel header needs to be set withing first
 	5 kilobytes in image. This should still allow plenty enough space
 	for other headers such as ELF or PE.
 
