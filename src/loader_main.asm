@@ -57,6 +57,13 @@ loader_main:
 	;  - current_target_addr: address where to read disk to, this
 	; 			starts at 0x100000
 	;
+	pusha
+	mov 	eax, dword [kernel_sectors_left]
+	call 	write_serial_hex
+	shr 	eax, 16
+	call 	write_serial_hex
+	popa
+
 	call 	load_kernel
 
 	; prepare kernel entry address to EBX & setup 32-bit protected

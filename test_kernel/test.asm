@@ -17,7 +17,6 @@ header:
 
 	mov	al, '0'
 	out	dx, al
-
 	
 	cli
 	hlt

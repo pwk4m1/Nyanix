@@ -39,6 +39,46 @@ panic:
 		hlt
 		jmp	.hang
 
+; ax = number to print, ends to newline
+write_serial_hex:
+	pusha
+	
+	mov 	dx, 0x03F8
+	mov 	cx, 4
+	mov 	bx, ax
+
+	.itoah:
+		mov 	al, bh
+		and 	al, 0xF0
+		shr 	al, 4
+		shl 	bx, 4
+
+		cmp 	al, 0xA
+		jl 	.base10
+	
+	; base 16
+		sub 	al, 0x0A
+		add 	al, 0x41
+		out 	dx, al
+		dec 	cx
+		jnz 	.itoah
+	
+	.done:
+		mov 	al, 0x0A
+		out 	dx, al
+		mov 	al, 0x0D
+		out 	dx, al
+		popa
+		ret
+	
+	.base10:
+		add 	al, 0x30
+		out 	dx, al
+		dec 	cx
+		jnz 	.itoah
+		jmp 	.done
+
+
 %endif ; CONSOLE_ASM
 
 

@@ -11,7 +11,7 @@ org	0x7c00
 bits	16
 
 %ifndef SECTOR_CNT
-	%define SECTOR_CNT 2
+	%define SECTOR_CNT 3
 %endif
 
 ; Clear CS, jump to mbr_start
