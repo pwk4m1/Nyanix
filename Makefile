@@ -21,5 +21,5 @@ install-debug:
 
 qemu:
 	dd if=test_kernel/test >> nyanix
-	qemu-system-x86_64 -nographic -serial mon:stdio -d guest_errors nyanix 
+	qemu-system-x86_64 -serial stdio -d guest_errors nyanix 
 
