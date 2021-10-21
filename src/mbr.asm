@@ -100,10 +100,14 @@ load_second_stage:
 		cmp	al, byte [.sectors_to_load]
 		je	.done
 		sub	byte [.sectors_to_load], al
-		mov	cl, 0x01
-		xor	dh, 1
-		jnz	.read_start
-		inc	ch
+		add 	cl, al
+		push 	dx
+		push 	cx
+		mov 	cx, 512
+		mul 	cx
+		add 	bx, ax
+		pop 	cx
+		pop 	dx
 		jmp	.read_start
 	.retry:
 		; disk read failed, reset disk
