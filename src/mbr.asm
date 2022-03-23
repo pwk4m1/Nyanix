@@ -14,8 +14,17 @@ bits	16
 	%define SECTOR_CNT 3
 %endif
 
-; Clear CS, jump to mbr_start
-jmp	0x0000:mbr_start
+jmp _start
+nop
+
+; space for FAT BPB
+; filled with NOP for correct disassembly before FAT BPB is filled in
+times	0x5a-($-$$) nop
+
+_start:
+	; Clear CS, jump to mbr_start
+	jmp	0x0000:mbr_start
+
 
 mbr_start:
 	cli
