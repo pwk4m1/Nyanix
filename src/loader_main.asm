@@ -6,10 +6,12 @@
 ; then relocating it to 0x100000.
 ;
 
-%include "src/consoles.asm"
-%include "src/bioscall.asm"
+%include "bootloader/consoles.asm"
+%include "bootloader/bioscall.asm"
 
 USED_SECTORS equ (SECTOR_CNT + 1)
+
+TARGET_ADDRESS equ 0x00100000
 
 kernel_sectors_left:
 	dd 	0
@@ -18,7 +20,7 @@ kernel_entry_offset:
 	dw 	0
 
 current_target_addr:
-	dd 	0x100000
+	dd 	TARGET_ADDRESS
 	
 current_sector:
 	db 	0
@@ -68,8 +70,6 @@ loader_main:
 
 	; prepare kernel entry address to EBX & setup 32-bit protected
 	; mode with simple GDT & disabled interrupts
-	mov 	ebx, 0x100000
-	add 	ebx, 8  	; sizeof kernel header
 
 	cli
 	lgdt 	[gdt32]
@@ -84,7 +84,11 @@ loader_main:
 		mov 	ds, ax
 		mov 	gs, ax
 		mov 	ss, ax
-		jmp 	[ebx]
+		[bits 	32]
+		mov 	ebx, TARGET_ADDRESS
+		add 	ebx, 8
+		jmp 	ebx
+		[bits 	16]
 	
 ; =================================================================== ;
 ; End of main "logic", rest is helper functions 'n stuff              ;
