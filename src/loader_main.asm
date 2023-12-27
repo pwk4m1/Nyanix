@@ -6,8 +6,8 @@
 ; then relocating it to 0x100000.
 ;
 
-%include "bootloader/consoles.asm"
-%include "bootloader/bioscall.asm"
+%include "src/consoles.asm"
+%include "src/bioscall.asm"
 
 USED_SECTORS equ (SECTOR_CNT + 1)
 
